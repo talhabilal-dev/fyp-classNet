@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
-const FRAME_INTERVAL_MS = 100; // ~10fps
+const FRAME_INTERVAL_MS = 150; // ~6fps
+
+async function blobToArrayBuffer(blob) {
+    return await blob.arrayBuffer();
+}
+
 export function useStream(sessionId) {
     const socket = getSocket();
     const [isStreaming, setIsStreaming] = useState(false);
@@ -10,23 +15,24 @@ export function useStream(sessionId) {
     const screenStreamRef = useRef(null);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    const emitFrame = (canvas, quality) => {
+    const sendFrame = async (canvas) => {
         if (!sessionId)
             return;
         canvas.toBlob(async (blob) => {
-            if (!blob)
+            if (!blob || !sessionId)
                 return;
-            const data = await blob.arrayBuffer();
-            socket.volatile.emit("stream:frame", {
+            const data = await blobToArrayBuffer(blob);
+            socket.emit("stream:frame", {
                 sessionId,
+                data,
                 width: canvas.width,
                 height: canvas.height,
                 ts: Date.now(),
                 mimeType: "image/jpeg",
-                data,
             });
-        }, "image/jpeg", quality);
+        }, "image/jpeg", 0.6);
     };
+
     const stopCapture = () => {
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
@@ -69,7 +75,7 @@ export function useStream(sessionId) {
                 canvas.height = video.videoHeight;
                 const ctx = canvas.getContext("2d");
                 ctx?.drawImage(video, 0, 0);
-                emitFrame(canvas, 0.6);
+                await sendFrame(canvas);
             }, FRAME_INTERVAL_MS);
             // Stop when user closes screen share dialog
             stream.getVideoTracks()[0].onended = stopCapture;
@@ -90,7 +96,19 @@ export function useStream(sessionId) {
     const postWhiteboardFrame = async (canvas) => {
         if (!sessionId || !isStreaming)
             return;
-        emitFrame(canvas, 0.8);
+        canvas.toBlob(async (blob) => {
+            if (!blob)
+                return;
+            const data = await blobToArrayBuffer(blob);
+            socket.emit("stream:frame", {
+                sessionId,
+                data,
+                width: canvas.width,
+                height: canvas.height,
+                ts: Date.now(),
+                mimeType: "image/jpeg",
+            });
+        }, "image/jpeg", 0.8);
     };
     const switchMode = (mode) => {
         if (!sessionId)
