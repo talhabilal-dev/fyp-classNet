@@ -1,0 +1,125 @@
+import { useEffect, useRef, useState } from "react";
+import { getSocket } from "../lib/socket";
+const FRAME_INTERVAL_MS = 100; // ~10fps
+export function useStream(sessionId) {
+    const socket = getSocket();
+    const [isStreaming, setIsStreaming] = useState(false);
+    const [streamMode, setStreamMode] = useState("screen");
+    const [error, setError] = useState(null);
+    const intervalRef = useRef(null);
+    const screenStreamRef = useRef(null);
+    const videoRef = useRef(null);
+    const canvasRef = useRef(null);
+    const emitFrame = (canvas, quality) => {
+        if (!sessionId)
+            return;
+        canvas.toBlob(async (blob) => {
+            if (!blob)
+                return;
+            const data = await blob.arrayBuffer();
+            socket.volatile.emit("stream:frame", {
+                sessionId,
+                width: canvas.width,
+                height: canvas.height,
+                ts: Date.now(),
+                mimeType: "image/jpeg",
+                data,
+            });
+        }, "image/jpeg", quality);
+    };
+    const stopCapture = () => {
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+        screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+        screenStreamRef.current = null;
+        setIsStreaming(false);
+        if (sessionId) {
+            socket.emit("stream:stop", { sessionId });
+        }
+    };
+    const startScreenShare = async () => {
+        if (!sessionId)
+            return;
+        setError(null);
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { frameRate: 10, width: 1280, height: 720 },
+                audio: false,
+            });
+            screenStreamRef.current = stream;
+            // Create hidden video element to capture stream
+            const video = document.createElement("video");
+            video.srcObject = stream;
+            video.play();
+            videoRef.current = video;
+            const canvas = document.createElement("canvas");
+            canvas.width = 1280;
+            canvas.height = 720;
+            canvasRef.current = canvas;
+            setIsStreaming(true);
+            setStreamMode("screen");
+            socket.emit("stream:start", { sessionId, mode: "screen" });
+            // Capture + post frames
+            intervalRef.current = setInterval(async () => {
+                if (!video.videoWidth)
+                    return;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext("2d");
+                ctx?.drawImage(video, 0, 0);
+                emitFrame(canvas, 0.6);
+            }, FRAME_INTERVAL_MS);
+            // Stop when user closes screen share dialog
+            stream.getVideoTracks()[0].onended = stopCapture;
+        }
+        catch (err) {
+            if (err.name !== "NotAllowedError") {
+                setError("Failed to start screen share");
+            }
+        }
+    };
+    const startWhiteboard = () => {
+        if (!sessionId)
+            return;
+        setIsStreaming(true);
+        setStreamMode("whiteboard");
+        socket.emit("stream:start", { sessionId, mode: "whiteboard" });
+    };
+    const postWhiteboardFrame = async (canvas) => {
+        if (!sessionId || !isStreaming)
+            return;
+        emitFrame(canvas, 0.8);
+    };
+    const switchMode = (mode) => {
+        if (!sessionId)
+            return;
+        setStreamMode(mode);
+        socket.emit("stream:mode-change", { sessionId, mode });
+        if (mode === "screen") {
+            startScreenShare();
+        }
+        else {
+            // Stop screen capture but keep streaming
+            if (intervalRef.current)
+                clearInterval(intervalRef.current);
+            screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+            screenStreamRef.current = null;
+            startWhiteboard();
+        }
+    };
+    useEffect(() => {
+        return () => stopCapture();
+    }, []);
+    return {
+        isStreaming,
+        streamMode,
+        error,
+        startScreenShare,
+        startWhiteboard,
+        stopCapture,
+        switchMode,
+        postWhiteboardFrame,
+    };
+}

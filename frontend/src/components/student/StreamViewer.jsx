@@ -1,0 +1,9 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useStreamView } from "../../hooks/useStreamView";
+export function StreamViewer({ sessionId }) {
+    const { isTeacherStreaming, streamMode, frameSrc } = useStreamView(sessionId);
+    if (!isTeacherStreaming) {
+        return (_jsxs("div", { className: "bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden", children: [_jsx("div", { className: "px-5 py-4 border-b border-zinc-800", children: _jsx("h2", { className: "text-white font-semibold text-sm", children: "Lecture Screen" }) }), _jsxs("div", { className: "flex flex-col items-center justify-center py-10 gap-3", children: [_jsx("span", { className: "text-4xl", children: "\uD83D\uDDA5\uFE0F" }), _jsx("p", { className: "text-zinc-500 text-sm", children: "Teacher is not sharing" }), _jsx("p", { className: "text-zinc-600 text-xs", children: "Screen or whiteboard will appear here" })] })] }));
+    }
+    return (_jsxs("div", { className: "bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden", children: [_jsxs("div", { className: "px-5 py-4 border-b border-zinc-800 flex items-center justify-between", children: [_jsx("div", { className: "flex items-center gap-2", children: _jsx("h2", { className: "text-white font-semibold text-sm", children: streamMode === "whiteboard" ? "Whiteboard" : "Screen Share" }) }), _jsxs("div", { className: "flex items-center gap-1.5", children: [_jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" }), _jsx("span", { className: "text-red-400 text-xs font-medium", children: "Live" })] })] }), _jsx("div", { className: "bg-zinc-950", children: frameSrc ? (_jsx("img", { src: frameSrc, alt: "Live stream", className: "w-full object-contain" })) : (_jsx("div", { className: "flex items-center justify-center py-10", children: _jsx("div", { className: "w-6 h-6 border-2 border-zinc-600 border-t-emerald-500 rounded-full animate-spin" }) })) })] }));
+}
